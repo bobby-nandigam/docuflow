@@ -1,6 +1,5 @@
 # DocuFlow — Enterprise AI Document Intelligence Platform
 
-> Compete with Google Drive, Notion, SharePoint — and win on intelligence.
 
 ---
 
