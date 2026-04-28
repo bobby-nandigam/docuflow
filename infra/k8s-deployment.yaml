@@ -1,0 +1,239 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: docuflow
+  labels:
+    app: docuflow
+
+---
+# ─── CONFIG MAP ──────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: docuflow-config
+  namespace: docuflow
+data:
+  KAFKA_BROKERS: "kafka:9092"
+  QDRANT_URL: "http://qdrant:6333"
+  REDIS_URL: "redis://redis:6379"
+  S3_BUCKET: "docuflow"
+  S3_ENDPOINT: "http://minio:9000"
+
+---
+# ─── AUTH SERVICE ────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: docuflow
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      containers:
+        - name: auth-service
+          image: docuflow/auth-service:latest
+          ports:
+            - containerPort: 8010
+          envFrom:
+            - configMapRef:
+                name: docuflow-config
+            - secretRef:
+                name: docuflow-secrets
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8010
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8010
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: docuflow
+spec:
+  selector:
+    app: auth-service
+  ports:
+    - port: 8010
+      targetPort: 8010
+
+---
+# ─── DOC SERVICE ─────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: doc-service
+  namespace: docuflow
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: doc-service
+  template:
+    metadata:
+      labels:
+        app: doc-service
+    spec:
+      containers:
+        - name: doc-service
+          image: docuflow/doc-service:latest
+          ports:
+            - containerPort: 8020
+          envFrom:
+            - configMapRef:
+                name: docuflow-config
+            - secretRef:
+                name: docuflow-secrets
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "200m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: doc-service
+  namespace: docuflow
+spec:
+  selector:
+    app: doc-service
+  ports:
+    - port: 8020
+      targetPort: 8020
+
+---
+# ─── AI SERVICE ──────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-service
+  namespace: docuflow
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ai-service
+  template:
+    metadata:
+      labels:
+        app: ai-service
+    spec:
+      containers:
+        - name: ai-service
+          image: docuflow/ai-service:latest
+          ports:
+            - containerPort: 8030
+          envFrom:
+            - configMapRef:
+                name: docuflow-config
+            - secretRef:
+                name: docuflow-secrets
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "2000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-service
+  namespace: docuflow
+spec:
+  selector:
+    app: ai-service
+  ports:
+    - port: 8030
+      targetPort: 8030
+
+---
+# ─── HORIZONTAL POD AUTOSCALER ───────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: doc-service-hpa
+  namespace: docuflow
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: doc-service
+  minReplicas: 2
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+---
+# ─── INGRESS ─────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: docuflow-ingress
+  namespace: docuflow
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  tls:
+    - hosts:
+        - app.docuflow.io
+        - api.docuflow.io
+      secretName: docuflow-tls
+  rules:
+    - host: app.docuflow.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 3000
+    - host: api.docuflow.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8000

@@ -1,0 +1,64 @@
+_format_version: "3.0"
+_transform: true
+
+services:
+  - name: auth-service
+    url: http://auth-service:8010
+    routes:
+      - name: auth-routes
+        paths: ["/auth"]
+        strip_path: false
+
+  - name: doc-service
+    url: http://doc-service:8020
+    plugins:
+      - name: jwt
+    routes:
+      - name: doc-routes
+        paths: ["/documents", "/spaces"]
+        strip_path: false
+
+  - name: ai-service
+    url: http://ai-service:8030
+    plugins:
+      - name: jwt
+      - name: rate-limiting
+        config:
+          minute: 60
+          hour: 1000
+    routes:
+      - name: ai-routes
+        paths: ["/ai"]
+        strip_path: false
+
+  - name: workflow-service
+    url: http://workflow-service:8040
+    plugins:
+      - name: jwt
+    routes:
+      - name: workflow-routes
+        paths: ["/workflows", "/step-types"]
+        strip_path: false
+
+  - name: integration-service
+    url: http://integration-service:8050
+    routes:
+      - name: integration-routes
+        paths: ["/integrations", "/webhooks"]
+        strip_path: false
+
+plugins:
+  - name: cors
+    config:
+      origins: ["http://localhost:3000", "https://app.docuflow.io"]
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+      headers: ["Authorization", "Content-Type", "X-Tenant-ID"]
+      credentials: true
+
+  - name: request-transformer
+    config:
+      add:
+        headers:
+          - "X-Tenant-ID:$(jwt.tid)"
+          - "X-User-ID:$(jwt.sub)"
+          - "X-User-Role:$(jwt.role)"

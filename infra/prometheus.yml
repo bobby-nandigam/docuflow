@@ -1,0 +1,37 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'auth-service'
+    static_configs:
+      - targets: ['auth-service:8010']
+    metrics_path: '/metrics'
+
+  - job_name: 'doc-service'
+    static_configs:
+      - targets: ['doc-service:8020']
+
+  - job_name: 'ai-service'
+    static_configs:
+      - targets: ['ai-service:8030']
+
+  - job_name: 'workflow-service'
+    static_configs:
+      - targets: ['workflow-service:8040']
+
+  - job_name: 'integration-service'
+    static_configs:
+      - targets: ['integration-service:8050']
+
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['kafka:9092']
+
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres:5432']
+
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
